@@ -1,7 +1,16 @@
 # ---
 # jupyter:
 #   jupytext:
-#     formats: py:percent
+#     formats: ipynb,py:percent
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.19.6
+#   kernelspec:
+#     display_name: Python 3 (ipykernel)
+#     language: python
+#     name: python3
 # ---
 
 # %% [markdown]
@@ -46,7 +55,7 @@ def make_user_profile(n_users: int = 100) -> pl.DataFrame:
             ["ai_ml", "cloud", "security", "database", "devops"][i % 5]
             for i in range(n_users)
         ],
-        "event_timestamp": [NOW - timedelta(hours=i % 48) for i in range(n_users)],
+        "event_timestamp": [NOW - timedelta(hours=3 + i % 48) for i in range(n_users)],
     })
 
 
@@ -86,7 +95,7 @@ for p in sorted(FEAST_DATA.glob("*.parquet")):
 res = subprocess.run(
     ["feast", "apply"],
     cwd=str(FEAST_DIR),
-    capture_output=True, text=True, check=False,
+    capture_output=True, text=True, encoding="utf-8", check=False,
 )
 print("STDOUT:")
 print(res.stdout)
@@ -94,6 +103,11 @@ if res.stderr:
     print("STDERR:")
     print(res.stderr)
 assert res.returncode == 0, f"feast apply failed: {res.stderr}"
+res = subprocess.run(
+    ["feast", "feature-views", "list"], cwd=str(FEAST_DIR),
+    capture_output=True, text=True, encoding="utf-8", check=True,
+)
+print(res.stdout)
 
 # %% [markdown]
 # ## 3. `feast materialize-incremental` — load offline → online
@@ -106,7 +120,7 @@ end_dt = NOW.strftime("%Y-%m-%dT%H:%M:%S")
 res = subprocess.run(
     ["feast", "materialize-incremental", end_dt],
     cwd=str(FEAST_DIR),
-    capture_output=True, text=True, check=False,
+    capture_output=True, text=True, encoding="utf-8", check=False,
 )
 print(res.stdout[-1500:])
 if res.stderr:
@@ -147,7 +161,7 @@ print(f"Single lookup: {single_latency_ms:.2f}ms")
 print({k: v[0] for k, v in features.items()})
 
 # %% [markdown]
-# ## 5. TODO — Batch latency benchmark (100 lookups, P99)
+# ## 5. Batch latency benchmark (100 lookups, P99)
 
 # %%
 latencies: list[float] = []
@@ -196,6 +210,9 @@ historical = fs.get_historical_features(
     ],
 ).to_df()
 print(historical)
+assert len(historical) == 3
+assert historical["reading_speed_wpm"].notna().all()
+assert historical["topic_affinity"].notna().all()
 
 # %% [markdown]
 # ## Deliverable evidence

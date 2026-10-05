@@ -1,7 +1,16 @@
 # ---
 # jupyter:
 #   jupytext:
-#     formats: py:percent
+#     formats: ipynb,py:percent
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.19.6
+#   kernelspec:
+#     display_name: Python 3 (ipykernel)
+#     language: python
+#     name: python3
 # ---
 
 # %% [markdown]
@@ -71,7 +80,7 @@ client.create_collection(
 )
 
 # %% [markdown]
-# ## 4. TODO — embed + upsert toàn bộ corpus
+# ## 4. Embed + upsert toàn bộ corpus
 #
 # Embed `title + " " + text` cho từng doc, batch theo 64 docs/lần (fastembed
 # CPU-bound, batch=64 là sweet spot). Upsert vào Qdrant collection `lab19`.
@@ -79,10 +88,6 @@ client.create_collection(
 # **Hint:** xem `app/search.py` `_build_vector_index()` để tham khảo pattern.
 
 # %%
-# TODO: implement the embed + upsert loop here.
-# Expected outcome: client.count("lab19") == 1000
-# (~30 seconds on first run as fastembed downloads the model.)
-
 BATCH = 64
 points: list[PointStruct] = []
 for start in range(0, len(docs), BATCH):
@@ -107,6 +112,8 @@ assert n_indexed == 1000, f"expected 1000 indexed, got {n_indexed}"
 # Top-5 docs gần nhất với câu query. Chú ý: cùng 1 query có thể trả về docs
 # từ nhiều topic — đó là dấu hiệu vector embedding tổng quát. Để filter theo
 # topic, dùng Qdrant payload filter.
+# `score` dưới đây là cosine similarity: càng cao càng tương đồng,
+# không phải cosine distance.
 
 # %%
 query = "cloud computing và tự động mở rộng"

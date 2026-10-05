@@ -1,7 +1,7 @@
 # ---
 # jupyter:
 #   jupytext:
-#     formats: py:percent
+#     formats: ipynb,py:percent
 # ---
 
 # %% [markdown]

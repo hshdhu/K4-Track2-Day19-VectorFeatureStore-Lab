@@ -1,7 +1,7 @@
 # ---
 # jupyter:
 #   jupytext:
-#     formats: py:percent
+#     formats: ipynb,py:percent
 # ---
 
 # %% [markdown]
@@ -119,7 +119,8 @@ print(f"\nΔ recall vs single-shot:  tách câu {split - base:+.3f}   tách + fi
 #
 # **Và hãy so hai dòng agentic với nhau.** Bật filter suy đoán làm *giảm* recall
 # so với chỉ tách câu — vì topic đoán từ keyword loại bỏ luôn những document liên
-# quan nằm ở cụm bên cạnh. Đổi lại, nó tốn ít call hơn. Đây đúng là bài học của
+# quan nằm ở cụm bên cạnh. Số call và độ trễ cần đọc từ bảng đo thực tế;
+# filter không bảo đảm giảm chi phí. Đây đúng là bài học của
 # NB5 lặp lại ở tầng agent: **filter không miễn phí, phải đo chứ đừng đoán.**
 
 # %% [markdown]

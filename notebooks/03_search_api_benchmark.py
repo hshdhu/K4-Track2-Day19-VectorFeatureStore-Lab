@@ -1,7 +1,16 @@
 # ---
 # jupyter:
 #   jupytext:
-#     formats: py:percent
+#     formats: ipynb,py:percent
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.19.6
+#   kernelspec:
+#     display_name: Python 3 (ipykernel)
+#     language: python
+#     name: python3
 # ---
 
 # %% [markdown]
@@ -15,8 +24,10 @@
 
 # %%
 import _setup  # noqa: F401
+import json
 import statistics
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -30,40 +41,50 @@ import httpx
 
 # %%
 ROOT = Path(_setup.__file__).resolve().parent.parent
-proc = subprocess.Popen(
-    ["uvicorn", "app.main:app", "--port", "8000", "--log-level", "warning"],
-    cwd=str(ROOT),
-)
+URL = "http://localhost:8000"
+http = httpx.Client(base_url=URL, timeout=10.0)
+proc = None
+try:
+    r = http.get("/healthz")
+    already_ready = r.status_code == 200 and r.json().get("ready")
+except httpx.HTTPError:
+    already_ready = False
+if not already_ready:
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "uvicorn", "app.main:app", "--port", "8000", "--log-level", "warning"],
+        cwd=str(ROOT),
+    )
 
 # Đợi server up + warm (Searcher.from_corpus loads embeddings + indexes 1000 docs)
-URL = "http://localhost:8000"
-for _ in range(60):
+for _ in range(180):
     try:
-        r = httpx.get(f"{URL}/healthz", timeout=2.0)
+        r = http.get("/healthz", timeout=2.0)
         if r.status_code == 200 and r.json().get("ready"):
             break
     except httpx.HTTPError:
         pass
     time.sleep(1)
 else:
-    raise RuntimeError("API didn't become ready within 60s")
+    raise RuntimeError("API didn't become ready within 180s")
 
-print(httpx.get(f"{URL}/healthz").json())
+print(http.get("/healthz").json())
 
 # %% [markdown]
 # ## 2. Single query — kiểm tra response shape
 
 # %%
-r = httpx.get(f"{URL}/search", params={"q": "cloud computing tự động mở rộng", "mode": "hybrid"})
+r = http.get("/search", params={"q": "cloud computing tự động mở rộng", "mode": "hybrid"})
 r.raise_for_status()
 body = r.json()
+assert {"query", "mode", "top_k", "latency_ms", "hits"} <= body.keys()
+print(json.dumps({**body, "hits": body["hits"][:3]}, ensure_ascii=False, indent=2))
 print(f"latency_ms: {body['latency_ms']:.1f}")
 print(f"top-3 hits:")
 for h in body["hits"][:3]:
     print(f"  {h['doc_id']:>14}  score={h['score']:.4f}  {h['title']}")
 
 # %% [markdown]
-# ## 3. TODO — Latency benchmark (100 queries × 3 modes)
+# ## 3. Latency benchmark (100 queries × 3 modes)
 #
 # Dùng 50 golden queries × 2 reps = 100 calls/mode. Ghi nhận latency từ
 # `body["latency_ms"]` (server-side, đã trừ network) HOẶC từ wall-clock httpx
@@ -72,10 +93,14 @@ for h in body["hits"][:3]:
 # Output: bảng P50/P95/P99 cho 3 mode.
 
 # %%
-import json
-
 DATA = ROOT / "data"
 golden = [json.loads(l) for l in (DATA / "golden_set.jsonl").open(encoding="utf-8")]
+
+# Warm up all three retrieval modes before measuring server-side latency.
+for mode in ("keyword", "semantic", "hybrid"):
+    for q in golden[:10]:
+        r = http.get("/search", params={"q": q["query"], "mode": mode})
+        r.raise_for_status()
 
 
 def percentile(values: list[float], p: float) -> float:
@@ -91,7 +116,8 @@ def benchmark_mode(mode: str, reps: int = 2) -> dict[str, float]:
     for _ in range(reps):
         for q in golden:
             t0 = time.perf_counter()
-            r = httpx.get(f"{URL}/search", params={"q": q["query"], "mode": mode})
+            r = http.get("/search", params={"q": q["query"], "mode": mode})
+            r.raise_for_status()
             wall_latencies.append((time.perf_counter() - t0) * 1000)
             server_latencies.append(r.json()["latency_ms"])
     return {
@@ -127,9 +153,13 @@ else:
 # ## 5. Cleanup — stop the API server
 
 # %%
-proc.terminate()
-proc.wait(timeout=5)
-print("API server stopped")
+http.close()
+if proc is not None:
+    proc.terminate()
+    proc.wait(timeout=5)
+    print("API server stopped")
+else:
+    print("Notebook client closed; existing API server is still running")
 
 # %% [markdown]
 # ## Deliverable evidence

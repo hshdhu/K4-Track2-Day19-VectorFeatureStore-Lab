@@ -23,8 +23,14 @@ if [ ! -d ".venv" ]; then
     python3 -m venv .venv
   fi
 fi
+if [ -f .venv/Scripts/activate ]; then
+  VENV_ACTIVATE=.venv/Scripts/activate
+else
+  VENV_ACTIVATE=.venv/bin/activate
+fi
 # shellcheck source=/dev/null
-source .venv/bin/activate
+source "$VENV_ACTIVATE"
+export PYTHONUTF8=1
 
 # ── 3. Install deps ─────────────────────────────────────────────────────
 # `uv venv` may pick a different interpreter than the system `python3`, so the
@@ -37,17 +43,19 @@ if [ "$NEED_DILL_OVERRIDE" = "1" ]; then
   echo "[lite] Python >= 3.14 -> applying dill>=0.4 override (feast's pin is too old; see requirements.txt)"
 fi
 
-if command -v uv >/dev/null 2>&1; then
+echo "[lite] Installing dependencies (set USE_UV=0 to use pip instead)"
+if [ "${USE_UV:-1}" != "0" ] && command -v uv >/dev/null 2>&1; then
   if [ "$NEED_DILL_OVERRIDE" = "1" ]; then
-    uv pip install --overrides overrides-py314.txt -r requirements.txt
+    uv -v pip install --python "$VIRTUAL_ENV" --overrides overrides-py314.txt -r requirements.txt
   else
-    uv pip install -r requirements.txt
+    uv -v pip install --python "$VIRTUAL_ENV" -r requirements.txt
   fi
 else
-  pip install -q -U pip
-  pip install -q -r requirements.txt
+  python -m ensurepip --upgrade
+  python -m pip install --upgrade pip
+  python -m pip install -r requirements.txt
   if [ "$NEED_DILL_OVERRIDE" = "1" ]; then
-    pip install -q --upgrade 'dill>=0.4,<1.0'
+    python -m pip install --upgrade 'dill>=0.4,<1.0'
   fi
 fi
 
@@ -76,7 +84,7 @@ cat <<EOF
 
 [lite] Done. Activate the venv and start working:
 
-    source .venv/bin/activate
+    source $VENV_ACTIVATE
     make api       # start FastAPI on :8000
     make lab       # open Jupyter on :8888
     make benchmark # Precision@10 + latency table
